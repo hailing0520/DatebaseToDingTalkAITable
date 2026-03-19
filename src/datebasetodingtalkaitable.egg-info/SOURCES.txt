@@ -1,0 +1,14 @@
+README.md
+pyproject.toml
+src/datebasetodingtalkaitable/__init__.py
+src/datebasetodingtalkaitable/app.py
+src/datebasetodingtalkaitable/config.py
+src/datebasetodingtalkaitable/db_client.py
+src/datebasetodingtalkaitable/dingtalk_client.py
+src/datebasetodingtalkaitable/record_value.py
+src/datebasetodingtalkaitable/sync_service.py
+src/datebasetodingtalkaitable.egg-info/PKG-INFO
+src/datebasetodingtalkaitable.egg-info/SOURCES.txt
+src/datebasetodingtalkaitable.egg-info/dependency_links.txt
+src/datebasetodingtalkaitable.egg-info/requires.txt
+src/datebasetodingtalkaitable.egg-info/top_level.txt

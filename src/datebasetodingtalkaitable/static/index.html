@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>数据库同步钉钉 AI 表格</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: "Microsoft YaHei", sans-serif; max-width: 900px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 1.25rem; margin-bottom: 12px; }
+    h2 { font-size: 1rem; margin: 16px 0 8px; color: #333; }
+    label { display: block; margin-top: 8px; }
+    input, select, textarea { width: 100%; padding: 6px 8px; margin-top: 2px; }
+    textarea { min-height: 80px; resize: vertical; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .row > * { flex: 1 1 200px; }
+    button { padding: 8px 16px; margin-top: 8px; cursor: pointer; background: #1677ff; color: #fff; border: none; border-radius: 4px; }
+    button:hover { background: #4096ff; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    .log { background: #f5f5f5; padding: 12px; margin-top: 12px; white-space: pre-wrap; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    .error { color: #c00; }
+    .ok { color: #080; }
+    .section { border: 1px solid #eee; padding: 12px; margin-bottom: 12px; border-radius: 4px; }
+    .mapping-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .mapping-table th, .mapping-table td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+    .mapping-table select { width: 100%; margin: 0; }
+    small { color: #666; display: block; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>数据库同步钉钉 AI 表格</h1>
+  <p><small>从 SqlServer 执行自定义 SQL，将结果全量插入钉钉 AI 表格。AI 表格 ID 可从钉钉 AI 表格 URL 或分享/设置中获取。</small></p>
+
+  <div class="section">
+    <h2>1. 数据库连接</h2>
+    <div class="row">
+      <label>服务器 <input type="text" id="dbServer" placeholder="localhost 或 192.168.1.1" /></label>
+      <label>端口 <input type="number" id="dbPort" value="1433" /></label>
+      <label>数据库 <input type="text" id="dbDatabase" placeholder="数据库名" /></label>
+    </div>
+    <div class="row">
+      <label>用户名 <input type="text" id="dbUser" /></label>
+      <label>密码 <input type="password" id="dbPassword" /></label>
+    </div>
+    <button type="button" id="btnTestDb">测试连接</button>
+  </div>
+
+  <div class="section">
+    <h2>2. 自定义 SQL</h2>
+    <label>查询 SQL（只读，结果将全量插入 AI 表格）</label>
+    <textarea id="sql" placeholder="SELECT id, name, amount FROM your_table"></textarea>
+    <button type="button" id="btnPreview">预览数据（前 100 行）</button>
+    <div id="previewResult" class="log" style="display:none;"></div>
+  </div>
+
+  <div class="section">
+    <h2>3. 钉钉应用</h2>
+    <div class="row">
+      <label>AppKey <input type="text" id="appKey" placeholder="企业内部应用 AppKey" /></label>
+      <label>AppSecret <input type="password" id="appSecret" placeholder="AppSecret" /></label>
+    </div>
+    <button type="button" id="btnToken">获取 Token（测试）</button>
+  </div>
+
+  <div class="section">
+    <h2>4. AI 表格与数据表</h2>
+    <label>AI 表格 ID <input type="text" id="datasheetId" placeholder="从钉钉 AI 表格 URL 或设置中获取" /></label>
+    <button type="button" id="btnSheets">获取数据表列表</button>
+    <label>选择数据表 <select id="sheetId"><option value="">请先获取数据表列表</option></select></label>
+    <button type="button" id="btnFields">获取字段列表</button>
+  </div>
+
+  <div class="section">
+    <h2>5. 字段映射</h2>
+    <p>将 SQL 查询结果的列映射到 AI 表格字段（必填字段必须有对应列且无空值，否则报错）。</p>
+    <div id="mappingContainer"></div>
+  </div>
+
+  <div class="section">
+    <h2>6. 执行同步</h2>
+    <button type="button" id="btnSync">全量同步到 AI 表格</button>
+    <div id="syncLog" class="log"></div>
+  </div>
+
+  <script>
+    const api = (path, body) =>
+      fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json());
+
+    function log(elId, msg, isError) {
+      const el = document.getElementById(elId);
+      el.style.display = "block";
+      el.innerHTML = (el.innerHTML ? el.innerHTML + "\n" : "") + msg;
+      el.classList.toggle("error", isError);
+      el.classList.toggle("ok", !isError);
+    }
+    function clearLog(elId) {
+      const el = document.getElementById(elId);
+      el.innerHTML = "";
+      el.style.display = "none";
+    }
+
+    document.getElementById("btnTestDb").onclick = async () => {
+      const res = await api("/api/db/test", {
+        server: document.getElementById("dbServer").value,
+        port: parseInt(document.getElementById("dbPort").value, 10) || 1433,
+        database: document.getElementById("dbDatabase").value,
+        user: document.getElementById("dbUser").value,
+        password: document.getElementById("dbPassword").value,
+      });
+      alert(res.ok ? "连接成功" : "连接失败: " + (res.error || ""));
+    };
+
+    let lastColumns = [];
+    document.getElementById("btnPreview").onclick = async () => {
+      const el = document.getElementById("previewResult");
+      clearLog("previewResult");
+      const res = await api("/api/db/query", {
+        server: document.getElementById("dbServer").value,
+        port: parseInt(document.getElementById("dbPort").value, 10) || 1433,
+        database: document.getElementById("dbDatabase").value,
+        user: document.getElementById("dbUser").value,
+        password: document.getElementById("dbPassword").value,
+        sql: document.getElementById("sql").value,
+        limit: 100,
+      });
+      if (res.error) {
+        log("previewResult", res.error, true);
+        return;
+      }
+      lastColumns = res.columns || [];
+      log("previewResult", "列: " + lastColumns.join(", ") + "\n行数: " + (res.rows || []).length, false);
+      buildMappingUi();
+    };
+
+    document.getElementById("btnToken").onclick = async () => {
+      const res = await api("/api/dingtalk/token", {
+        appKey: document.getElementById("appKey").value,
+        appSecret: document.getElementById("appSecret").value,
+      });
+      alert(res.ok ? "Token 获取成功" : "失败: " + (res.error || ""));
+    };
+
+    document.getElementById("btnSheets").onclick = async () => {
+      const res = await api("/api/dingtalk/sheets", {
+        appKey: document.getElementById("appKey").value,
+        appSecret: document.getElementById("appSecret").value,
+        datasheetId: document.getElementById("datasheetId").value,
+      });
+      const sel = document.getElementById("sheetId");
+      sel.innerHTML = "";
+      if (res.error) {
+        sel.appendChild(new Option("获取失败: " + res.error, ""));
+        return;
+      }
+      const sheets = res.sheets || [];
+      sheets.forEach(s => {
+        const id = s.id || s.sheetId || s.sheet_id;
+        const name = s.name || s.title || id || "";
+        sel.appendChild(new Option(name || id, id));
+      });
+      if (!sel.options.length) sel.appendChild(new Option("请先获取数据表列表", ""));
+    };
+
+    let lastFields = [];
+    document.getElementById("btnFields").onclick = async () => {
+      const res = await api("/api/dingtalk/fields", {
+        appKey: document.getElementById("appKey").value,
+        appSecret: document.getElementById("appSecret").value,
+        datasheetId: document.getElementById("datasheetId").value,
+        sheetId: document.getElementById("sheetId").value,
+      });
+      if (res.error) {
+        alert("获取字段失败: " + res.error);
+        return;
+      }
+      lastFields = res.fields || [];
+      buildMappingUi();
+    };
+
+    function buildMappingUi() {
+      const container = document.getElementById("mappingContainer");
+      if (!lastColumns.length || !lastFields.length) {
+        container.innerHTML = "<p>请先执行「预览数据」并「获取字段列表」。</p>";
+        return;
+      }
+      let html = "<table class=\"mapping-table\"><tr><th>数据库列</th><th>→</th><th>AI 表格字段</th></tr>";
+      lastColumns.forEach(col => {
+        html += "<tr><td>" + col + "</td><td>→</td><td><select data-db-col=\"" + col + "\">";
+        html += "<option value=\"\">不映射</option>";
+        lastFields.forEach(f => {
+          const id = f.id || f.fieldId || f.field_id;
+          const name = (f.name || f.title || id || "").toString();
+          html += "<option value=\"" + id + "\">" + name + (f.required ? " (必填)" : "") + "</option>";
+        });
+        html += "</select></td></tr>";
+      });
+      html += "</table>";
+      container.innerHTML = html;
+    }
+
+    function getMapping() {
+      const mapping = [];
+      document.querySelectorAll("#mappingContainer select[data-db-col]").forEach(sel => {
+        const fieldId = sel.value;
+        if (!fieldId) return;
+        mapping.push({ dbColumn: sel.getAttribute("data-db-col"), fieldId });
+      });
+      return mapping;
+    }
+
+    function getFieldsSchema() {
+      return lastFields.map(f => ({
+        id: f.id || f.fieldId || f.field_id,
+        type: f.type || "Text",
+        required: !!f.required,
+      }));
+    }
+
+    document.getElementById("btnSync").onclick = async () => {
+      const logEl = "syncLog";
+      clearLog(logEl);
+      log(logEl, "开始同步...", false);
+      const mapping = getMapping();
+      if (!mapping.length) {
+        log(logEl, "请至少配置一列映射。", true);
+        return;
+      }
+      const body = {
+        server: document.getElementById("dbServer").value,
+        port: parseInt(document.getElementById("dbPort").value, 10) || 1433,
+        database: document.getElementById("dbDatabase").value,
+        user: document.getElementById("dbUser").value,
+        password: document.getElementById("dbPassword").value,
+        sql: document.getElementById("sql").value,
+        appKey: document.getElementById("appKey").value,
+        appSecret: document.getElementById("appSecret").value,
+        datasheetId: document.getElementById("datasheetId").value,
+        sheetId: document.getElementById("sheetId").value,
+        mapping,
+        fieldsSchema: getFieldsSchema(),
+      };
+      try {
+        const res = await api("/api/sync", body);
+        if (res.error && res.success === 0 && res.fail === 0) {
+          log(logEl, "同步失败: " + res.error, true);
+          return;
+        }
+        log(logEl, "成功: " + (res.success || 0) + " 条，失败: " + (res.fail || 0) + (res.skippedRows ? "，跳过(必填无值): " + res.skippedRows : ""), false);
+        (res.errors || []).forEach(e => log(logEl, e, true));
+      } catch (e) {
+        log(logEl, "请求异常: " + e.message, true);
+      }
+    };
+  </script>
+</body>
+</html>

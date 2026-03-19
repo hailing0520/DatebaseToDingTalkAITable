@@ -1,7 +1,18 @@
 [project]
 name = "datebasetodingtalkaitable"
 version = "0.1.0"
-description = "Add your description here"
+description = "SqlServer 数据同步到钉钉 AI 表格"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "flask>=3.0.0",
+    "requests>=2.31.0",
+    "pyodbc>=5.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
