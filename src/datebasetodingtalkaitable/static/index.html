@@ -64,7 +64,9 @@
 
   <div class="section">
     <h2>4. AI 表格与数据表</h2>
-    <label>AI 表格 ID <input type="text" id="datasheetId" placeholder="从钉钉 AI 表格 URL 或设置中获取" /></label>
+    <label>操作人 unionId（必填）<input type="text" id="operatorId" placeholder="调用接口的操作人 unionId，见钉钉文档" /></label>
+    <small>可通过「查询用户详情」或「通过免登码获取用户信息」接口获取。</small>
+    <label>AI 表格 ID（baseId）<input type="text" id="datasheetId" placeholder="从钉钉 AI 表格 URL 或设置中获取" /></label>
     <button type="button" id="btnSheets">获取数据表列表</button>
     <label>选择数据表 <select id="sheetId"><option value="">请先获取数据表列表</option></select></label>
     <button type="button" id="btnFields">获取字段列表</button>
@@ -145,6 +147,7 @@
         appKey: document.getElementById("appKey").value,
         appSecret: document.getElementById("appSecret").value,
         datasheetId: document.getElementById("datasheetId").value,
+        operatorId: document.getElementById("operatorId").value.trim(),
       });
       const sel = document.getElementById("sheetId");
       sel.innerHTML = "";
@@ -168,6 +171,7 @@
         appSecret: document.getElementById("appSecret").value,
         datasheetId: document.getElementById("datasheetId").value,
         sheetId: document.getElementById("sheetId").value,
+        operatorId: document.getElementById("operatorId").value.trim(),
       });
       if (res.error) {
         alert("获取字段失败: " + res.error);
@@ -236,6 +240,7 @@
         appSecret: document.getElementById("appSecret").value,
         datasheetId: document.getElementById("datasheetId").value,
         sheetId: document.getElementById("sheetId").value,
+        operatorId: document.getElementById("operatorId").value.trim(),
         mapping,
         fieldsSchema: getFieldsSchema(),
       };

@@ -13,8 +13,9 @@ def run_sync(
     sql: str,
     app_key: str,
     app_secret: str,
-    datasheet_id: str,
+    base_id: str,
     sheet_id: str,
+    operator_id: str,
     mapping: list[dict[str, Any]],
     fields_schema: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -40,7 +41,7 @@ def run_sync(
 
     client = DingTalkClient(app_key, app_secret)
     success, fail, insert_errors = client.insert_records_batch(
-        datasheet_id, sheet_id, records
+        base_id, sheet_id, records, operator_id
     )
     all_errors = convert_errors + insert_errors
     return {

@@ -84,16 +84,19 @@ def api_dingtalk_token():
 
 @app.route("/api/dingtalk/sheets", methods=["POST"])
 def api_dingtalk_sheets():
-    """获取 AI 表格下所有数据表。body: { appKey, appSecret, datasheetId }"""
+    """获取 AI 表格下所有数据表。body: { appKey, appSecret, datasheetId, operatorId }"""
     client = _dingtalk_client()
     if isinstance(client, tuple):
         return client
     data = request.get_json() or {}
-    datasheet_id = (data.get("datasheetId") or data.get("datasheet_id") or "").strip()
-    if not datasheet_id:
-        return jsonify({"error": "缺少 datasheetId"}), 400
+    base_id = (data.get("datasheetId") or data.get("datasheet_id") or "").strip()
+    operator_id = (data.get("operatorId") or data.get("operator_id") or "").strip()
+    if not base_id:
+        return jsonify({"error": "缺少 datasheetId（AI 表格 ID）"}), 400
+    if not operator_id:
+        return jsonify({"error": "缺少 operatorId（操作人 unionId），见接口文档"}), 400
     try:
-        sheets = client.get_all_sheets(datasheet_id)
+        sheets = client.get_all_sheets(base_id, operator_id)
         return jsonify({"sheets": sheets})
     except DingTalkClientError as e:
         return jsonify({"error": str(e), "code": getattr(e, "code", None)}), 400
@@ -101,17 +104,20 @@ def api_dingtalk_sheets():
 
 @app.route("/api/dingtalk/fields", methods=["POST"])
 def api_dingtalk_fields():
-    """获取指定数据表的所有字段。body: { appKey, appSecret, datasheetId, sheetId }"""
+    """获取指定数据表的所有字段。body: { appKey, appSecret, datasheetId, sheetId, operatorId }"""
     client = _dingtalk_client()
     if isinstance(client, tuple):
         return client
     data = request.get_json() or {}
-    datasheet_id = (data.get("datasheetId") or data.get("datasheet_id") or "").strip()
+    base_id = (data.get("datasheetId") or data.get("datasheet_id") or "").strip()
     sheet_id = (data.get("sheetId") or data.get("sheet_id") or "").strip()
-    if not datasheet_id or not sheet_id:
+    operator_id = (data.get("operatorId") or data.get("operator_id") or "").strip()
+    if not base_id or not sheet_id:
         return jsonify({"error": "缺少 datasheetId 或 sheetId"}), 400
+    if not operator_id:
+        return jsonify({"error": "缺少 operatorId（操作人 unionId）"}), 400
     try:
-        fields = client.get_all_fields(datasheet_id, sheet_id)
+        fields = client.get_all_fields(base_id, sheet_id, operator_id)
         return jsonify({"fields": fields})
     except DingTalkClientError as e:
         return jsonify({"error": str(e), "code": getattr(e, "code", None)}), 400
@@ -140,8 +146,9 @@ def api_sync():
     sql = (data.get("sql") or "").strip()
     app_key = (data.get("appKey") or data.get("app_key") or "").strip()
     app_secret = data.get("appSecret") or data.get("app_secret") or ""
-    datasheet_id = (data.get("datasheetId") or data.get("datasheet_id") or "").strip()
+    base_id = (data.get("datasheetId") or data.get("datasheet_id") or "").strip()
     sheet_id = (data.get("sheetId") or data.get("sheet_id") or "").strip()
+    operator_id = (data.get("operatorId") or data.get("operator_id") or "").strip()
     mapping = data.get("mapping") or []
     fields_schema = data.get("fieldsSchema") or data.get("fields_schema") or []
 
@@ -149,8 +156,10 @@ def api_sync():
         return jsonify({"error": "缺少数据库参数或 sql"}), 400
     if not app_key or not app_secret:
         return jsonify({"error": "缺少 appKey 或 appSecret"}), 400
-    if not datasheet_id or not sheet_id:
+    if not base_id or not sheet_id:
         return jsonify({"error": "缺少 datasheetId 或 sheetId"}), 400
+    if not operator_id:
+        return jsonify({"error": "缺少 operatorId（操作人 unionId）"}), 400
     if not mapping:
         return jsonify({"error": "缺少 mapping"}), 400
 
@@ -161,8 +170,9 @@ def api_sync():
             sql,
             app_key,
             app_secret,
-            datasheet_id,
+            base_id,
             sheet_id,
+            operator_id,
             mapping,
             fields_schema,
         )

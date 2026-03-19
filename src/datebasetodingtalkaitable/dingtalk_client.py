@@ -91,76 +91,77 @@ class DingTalkClient:
             )
         return data
 
-    def get_all_sheets(self, datasheet_id: str) -> list[dict[str, Any]]:
-        """获取 AI 表格下的所有数据表（Sheet）列表。"""
-        # 官方文档：api-notable-getallsheets
-        # 常见 path：/v1.0/datasheets/{datasheetId}/sheets 或 /v2/datasheets/{datasheetId}/sheets
+    def get_all_sheets(self, base_id: str, operator_id: str) -> list[dict[str, Any]]:
+        """
+        获取 AI 表格下的所有数据表（Sheet）列表。
+        官方文档：GET /v1.0/notable/bases/{baseId}/sheets?operatorId=String
+        """
         result = self._request(
             "GET",
-            f"/v1.0/datasheets/{datasheet_id}/sheets",
+            f"/v1.0/notable/bases/{base_id}/sheets",
+            params={"operatorId": operator_id},
         )
-        # 返回结构以文档为准，此处兼容 list 或 result.sheets
+        # 文档返回：value 为数据表列表，每项含 id、name
         if isinstance(result, list):
             return result
-        if "sheets" in result:
-            return result["sheets"]
-        if "data" in result and isinstance(result["data"], list):
-            return result["data"]
         return result.get("value", result.get("result", []))
 
-    def get_all_fields(self, datasheet_id: str, sheet_id: str) -> list[dict[str, Any]]:
-        """获取指定数据表的所有字段。"""
-        # 官方文档：api-noatable-getallfields
+    def get_all_fields(
+        self, base_id: str, sheet_id: str, operator_id: str
+    ) -> list[dict[str, Any]]:
+        """
+        获取指定数据表的所有字段。
+        按「获取所有数据表」同类规范，使用 notable/bases 路径并传 operatorId。
+        """
         result = self._request(
             "GET",
-            f"/v1.0/datasheets/{datasheet_id}/sheets/{sheet_id}/fields",
+            f"/v1.0/notable/bases/{base_id}/sheets/{sheet_id}/fields",
+            params={"operatorId": operator_id},
         )
         if isinstance(result, list):
             return result
         if "fields" in result:
             return result["fields"]
-        if "data" in result and isinstance(result["data"], list):
-            return result["data"]
         return result.get("value", result.get("result", []))
 
     def insert_records(
         self,
-        datasheet_id: str,
+        base_id: str,
         sheet_id: str,
         records: list[dict[str, Any]],
+        operator_id: str,
     ) -> dict[str, Any]:
         """
         批量插入记录。每条 record 格式：{ "fields": { "fieldId": <record-value-format> } }
-        见：https://open.dingtalk.com/document/development/record-value-format
+        按 notable/bases 路径并传 operatorId。
         """
         if not records:
             return {"success": 0, "fail": 0, "records": []}
-        # 单次不超过限制
         batch = records[:INSERT_RECORDS_BATCH_SIZE]
         body = {"records": [{"fields": r["fields"]} for r in batch]}
         result = self._request(
             "POST",
-            f"/v1.0/datasheets/{datasheet_id}/sheets/{sheet_id}/records",
+            f"/v1.0/notable/bases/{base_id}/sheets/{sheet_id}/records",
             json_body=body,
+            params={"operatorId": operator_id},
         )
         return result
 
     def insert_records_batch(
         self,
-        datasheet_id: str,
+        base_id: str,
         sheet_id: str,
         records: list[dict[str, Any]],
+        operator_id: str,
         batch_size: int | None = None,
     ) -> tuple[int, int, list[str]]:
-        """
-        分批插入全部记录，返回 (成功数, 失败数, 错误信息列表)。
-        """
+        """分批插入全部记录，返回 (成功数, 失败数, 错误信息列表)。"""
         size = batch_size or INSERT_RECORDS_BATCH_SIZE
         success, fail, errors = 0, 0, []
         for i in range(0, len(records), size):
             chunk = records[i : i + size]
             try:
-                self.insert_records(datasheet_id, sheet_id, chunk)
+                self.insert_records(base_id, sheet_id, chunk, operator_id)
                 success += len(chunk)
             except DingTalkClientError as e:
                 fail += len(chunk)
